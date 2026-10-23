@@ -1,94 +1,108 @@
-"""Pipeline status — reads pipeline_runs and data_quality_log."""
+"""สถานะ Pipeline — อ่านตาราง pipeline_runs และ data_quality_log."""
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
-import theme
-from db import query
-from theme import STATUS_STYLE
+import theme as t
+from db import SOURCES, load_runs, query, run_status
+from live import live_html
 
-theme.inject_css()
-theme.header("สถานะ Pipeline", "อ่านจากตาราง pipeline_runs และ data_quality_log ใน PostgreSQL · อัปเดตทุกครั้งที่ DAG air_quality_pipeline รัน")
-with st.sidebar:
-    if st.button("รีเฟรช"):
-        st.rerun()
+t.header("สถานะ Pipeline", "DAG air_quality_pipeline · ตาราง pipeline_runs และ data_quality_log", live_html())
 
-runs = query("SELECT * FROM pipeline_runs ORDER BY id DESC LIMIT 2000")
+runs = load_runs()
 if runs.empty:
     st.info("ยังไม่มีประวัติการรัน")
     st.stop()
-for c in ("started_at", "finished_at"):
-    runs[c] = pd.to_datetime(runs[c], utc=True).dt.tz_convert("Asia/Bangkok")
 
+with st.sidebar:
+    t.sidebar_group("ข้อมูล")
+    if st.button("โหลดข้อมูลใหม่"):
+        st.cache_data.clear()
+        st.rerun()
 
-def color_status(v):
-    fg, bg, _ = STATUS_STYLE.get(v, STATUS_STYLE["skipped"])
-    return f"color:{fg};background-color:{bg};font-weight:600"
-
-
-theme.section("สถานะล่าสุดต่อแหล่งข้อมูล")
-SOURCES = {"air4thai": "Air4Thai (API)", "openmeteo": "Open-Meteo (API)", "aqicn_scrape": "aqicn.org (scrape)"}
-src = runs[runs["source"].isin(SOURCES)]
-last_run_of_source = src.groupby("source")["run_id"].first()
-cols = st.columns(3, gap="medium")
-for col, name in zip(cols, SOURCES):
-    if name not in last_run_of_source:
-        col.markdown(f'<div class="src-card"><div class="name">{SOURCES[name]}</div>'
-                     f'<div style="margin-top:8px">{theme.badge("never")}</div></div>', unsafe_allow_html=True)
+# ---------------------------------------------------------------- per-source cards
+t.section("แหล่งข้อมูล", "รอบล่าสุดของแต่ละแหล่ง")
+src_rows = runs[runs["source"].isin(SOURCES)]
+for col, name in zip(st.columns(3, gap="small"), SOURCES):
+    rows = src_rows[src_rows["source"] == name]
+    if rows.empty:
+        col.markdown(f'<div class="card"><div class="src-head"><b>{t.SOURCE_LABEL[name]}</b>{t.badge("never")}</div></div>',
+                     unsafe_allow_html=True)
         continue
-    rows = src[(src["source"] == name) & (src["run_id"] == last_run_of_source[name])]
+    rows = rows[rows["run_id"] == rows.iloc[0]["run_id"]]
     n_ok = int((rows["status"] == "success").sum())
     status = "success" if n_ok == len(rows) else ("partial" if n_ok else "failed")
-    failed = rows[rows["status"] != "success"]
-    err = (f'<div class="err">{failed["error_message"].iloc[0]}</div>' if not failed.empty else "")
+    err = rows.loc[rows["status"] != "success", "error_message"].dropna()
+    err_html = f'<div class="err">{t.esc(err.iloc[0][:220])}</div>' if not err.empty else ""
     col.markdown(
-        f'<div class="src-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
-        f'<span class="name">{SOURCES[name]}</span>{theme.badge(status)}</div>'
-        f'<div class="big">{int(rows["rows_fetched"].fillna(0).sum()):,} <small style="font-size:.8rem">rows fetched</small></div>'
-        f'<div class="meta">อัปเดต {rows["finished_at"].max():%d/%m/%Y %H:%M:%S} · {len(rows)} task(s)<br>'
-        f'run: {last_run_of_source[name]}</div>{err}</div>', unsafe_allow_html=True)
+        f'<div class="card"><div class="src-head"><b>{t.SOURCE_LABEL[name]}</b>{t.badge(status)}</div>'
+        f'<div class="val">{int(rows["rows_fetched"].fillna(0).sum()):,}<small>rows fetched</small></div>'
+        f'<div class="cmp">อัปเดต {rows["finished_at"].max():%d/%m %H:%M:%S} · {len(rows)} task · '
+        f'{t.esc(rows.iloc[0]["run_id"])}</div>{err_html}</div>', unsafe_allow_html=True)
 
-theme.section("ผลตรวจคุณภาพข้อมูล + การตัดรายการซ้ำ")
+# ---------------------------------------------------------------- data quality
+t.section("ผลตรวจคุณภาพข้อมูล", "รอบล่าสุด")
 dq = query("SELECT * FROM data_quality_log ORDER BY id DESC LIMIT 200")
 if not dq.empty:
     dq["checked_at"] = pd.to_datetime(dq["checked_at"], utc=True).dt.tz_convert("Asia/Bangkok")
     last = dq.iloc[0]
     ok = bool(last["passed"])
-    theme.kpi_row([
-        theme.kpi_card("Quality check ล่าสุด", "PASS" if ok else "FAIL",
-                       tag=("→ load_upsert", "#dcfce7", "#166534") if ok else ("→ quarantine", "#fef3c7", "#92400e"),
-                       foot=f"{last['checked_at']:%d/%m %H:%M:%S}"),
-        theme.kpi_card("แถวหลัง dedupe", f"{int(last['total_rows']):,}"),
-        theme.kpi_card("ตัดรายการซ้ำ", f"{int(last['duplicates_removed']):,}", foot="ข้ามแหล่ง (พิกัด+ชั่วโมง)"),
-        theme.kpi_card("PM2.5 null", f"{int(last['null_pm25']):,}"),
-        theme.kpi_card("แหล่งที่ใช้ได้", str(len((last["sources_ok"] or "").split(",")) if last["sources_ok"] else 0) + "/3",
-                       foot=last["sources_ok"] or "-"),
-    ])
-    st.caption(f"เหตุผล: {last['reasons']}")
-    dq_view = dq.assign(result=dq["passed"].map({True: "success", False: "quarantined"}))
-    st.dataframe(dq_view.style.map(color_status, subset=["result"]), use_container_width=True, hide_index=True, height=250)
+    verdict = t.badge("success" if ok else "quarantined", "PASS" if ok else "FAIL")
+    cards = [
+        t.kpi("Quality check", verdict, cmp_html=f"{last['checked_at']:%d/%m %H:%M} · "
+              f"{'→ load_upsert' if ok else '→ quarantine'}<br>{t.esc(last['reasons'])}"),
+        t.kpi("แถวหลัง dedupe", f"{int(last['total_rows']):,}", cmp_html=f"แหล่งที่ใช้ได้ <b>{t.esc(last['sources_ok'] or '-')}</b>"),
+        t.kpi("ตัดรายการซ้ำ", f"{int(last['duplicates_removed']):,}", cmp_html="ข้ามแหล่ง · พิกัด + ชั่วโมง"),
+        t.kpi("PM2.5 null", f"{int(last['null_pm25']):,}", cmp_html="เกณฑ์ ≤ 30% ของแถว"),
+        t.kpi("นอกช่วง / นอกประเทศ", f"{int(last['out_of_range'])} / {int(last['out_of_thailand'])}",
+              cmp_html="pm25 0–1000 · กรอบพิกัดไทย"),
+    ]
+    for col, card in zip(st.columns(5, gap="small"), cards):
+        col.markdown(card, unsafe_allow_html=True)
 
-theme.section("ประวัติการรันรายรอบ")
-summary = (runs.groupby("run_id")
-           .agg(started=("started_at", "min"), finished=("finished_at", "max"),
-                tasks=("id", "count"), failed=("status", lambda s: int((s == "failed").sum())),
-                quarantined=("status", lambda s: int((s == "quarantined").sum())))
-           .sort_values("started", ascending=False).reset_index())
-summary["status"] = summary.apply(lambda r: "quarantined" if r["quarantined"] else ("failed" if r["failed"] else "success"),
-                                  axis=1)
-summary["status"] = summary["status"].where(summary["status"] != "failed", "partial")
-st.dataframe(summary.head(50).style.map(color_status, subset=["status"]), use_container_width=True, hide_index=True)
-st.caption("partial = มีบางแหล่งล้มเหลว แต่ DAG ยังรวมข้อมูลจากแหล่งที่เหลือได้ (none_failed_min_one_success)")
+# ---------------------------------------------------------------- run timeline
+t.section("ไทม์ไลน์การรัน", "หนึ่งจุดต่อหนึ่งรอบ")
+summary = []
+for rid, rows in runs.groupby("run_id"):
+    loaded = rows.loc[rows["source"].isin(["load_upsert", "quality_alert"]), "rows_fetched"]
+    started, finished = rows["started_at"].min(), rows["finished_at"].max()
+    summary.append({"run_id": rid, "status": run_status(rows), "started": started, "finished": finished,
+                    "duration_s": (finished - started).total_seconds() if pd.notna(started) else None,
+                    "rows": int(loaded.iloc[0]) if not loaded.empty else None,
+                    "failed_tasks": int((rows["status"] == "failed").sum())})
+summary = pd.DataFrame(summary).sort_values("started", ascending=False)
 
-hist = src.copy()
-hist["run_hour"] = hist["finished_at"].dt.floor("h")
-hist["source"] = hist["source"].map(SOURCES)
+fig = go.Figure()
+for status in ["success", "partial", "quarantined", "failed"]:
+    s = summary[summary["status"] == status]
+    if s.empty:
+        continue
+    fig.add_trace(go.Scatter(
+        x=s["started"], y=[0] * len(s), mode="markers", name=t.STATUS_LABEL[status],
+        marker=dict(size=14, symbol="square", color=t.STATUS_COLOR[status], line=dict(width=0)),
+        customdata=s[["run_id", "duration_s", "rows", "failed_tasks"]].fillna(0).values,
+        hovertemplate="<b>%{customdata[0]}</b><br>%{x|%d/%m %H:%M}<br>ใช้เวลา %{customdata[1]:.0f} วินาที"
+                      "<br>แถว %{customdata[2]:,} · task ล้มเหลว %{customdata[3]}<extra></extra>"))
+t.style_fig(fig, 150).update_layout(yaxis=dict(visible=False, range=[-1, 1]), hovermode="closest")
+st.plotly_chart(fig, use_container_width=True, config=t.PLOT_CONFIG)
+
+hist = src_rows.assign(run_hour=src_rows["finished_at"].dt.floor("h"), source=src_rows["source"].map(t.SOURCE_LABEL))
 agg = hist.groupby(["run_hour", "source", "status"])["rows_fetched"].sum().reset_index()
-fig = px.bar(agg, x="run_hour", y="rows_fetched", color="source", pattern_shape="status",
-             color_discrete_map=theme.SOURCE_COLOR, barmode="group",
-             labels={"run_hour": "รอบที่รัน", "rows_fetched": "rows fetched", "source": "แหล่ง", "status": "สถานะ"})
-st.plotly_chart(theme.style_fig(fig, 360), use_container_width=True)
+t.section("จำนวนแถวที่ดึงต่อแหล่ง", "รวมต่อชั่วโมงที่รัน")
+fig = px.bar(agg, x="run_hour", y="rows_fetched", color="source", pattern_shape="status", barmode="group",
+             color_discrete_map=t.SOURCE_COLOR, labels={"run_hour": "", "rows_fetched": "rows"})
+st.plotly_chart(t.style_fig(fig, 280), use_container_width=True, config=t.PLOT_CONFIG)
 
-theme.section("Log ดิบ (pipeline_runs)")
-st.dataframe(runs.head(300).style.map(color_status, subset=["status"]), use_container_width=True, hide_index=True,
-             height=400)
+# ---------------------------------------------------------------- tables
+with st.expander(f"ประวัติการรันรายรอบ ({len(summary)} รอบ)"):
+    st.dataframe(summary, use_container_width=True, hide_index=True, column_config={
+        "started": st.column_config.DatetimeColumn("เริ่ม", format="DD/MM HH:mm:ss"),
+        "finished": st.column_config.DatetimeColumn("จบ", format="DD/MM HH:mm:ss"),
+        "duration_s": st.column_config.NumberColumn("วินาที", format="%.0f"),
+        "rows": st.column_config.NumberColumn("แถวที่โหลด", format="%d"),
+    })
+with st.expander("ผลตรวจคุณภาพทั้งหมด (data_quality_log)"):
+    st.dataframe(dq, use_container_width=True, hide_index=True)
+with st.expander("Log ดิบ (pipeline_runs)"):
+    st.dataframe(runs.head(300), use_container_width=True, hide_index=True)
