@@ -161,7 +161,7 @@ html, body, .stApp, .stMarkdown p, .stMarkdown li, label, input, textarea, .aq-h
 .aqi-legend {{ display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 6px; }}
 .aqi-legend span {{ font-size:.75rem; padding:3px 10px; border-radius:999px; font-weight:600; }}
 .badge {{ display:inline-flex; align-items:center; gap:6px; font-size:.78rem; font-weight:600; padding:3px 10px;
-  border-radius:999px; border:1px solid transparent; }}
+  border-radius:999px; border:1px solid transparent; white-space:nowrap; flex-shrink:0; }}
 .badge::before {{ content:""; width:7px; height:7px; border-radius:50%; background:currentColor; }}
 .src-card {{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px; height:100%; }}
 .src-card .name {{ font-weight:650; font-size:1rem; color:var(--text) !important; }}
