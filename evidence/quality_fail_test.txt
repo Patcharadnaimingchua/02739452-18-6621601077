@@ -1,0 +1,33 @@
+Quality-fail test: QUALITY_MIN_ROWS=100000
+Task states:
+create_tables[] -> success
+extract.extract_air4thai[] -> success
+extract.extract_openmeteo[0] -> success
+extract.extract_openmeteo[1] -> success
+extract.extract_openmeteo[2] -> success
+extract.extract_openmeteo[3] -> success
+extract.extract_openmeteo[4] -> success
+extract.extract_openmeteo[5] -> success
+extract.extract_openmeteo[6] -> success
+extract.plan_openmeteo_batches[] -> success
+extract.scrape_aqicn[] -> success
+finish[] -> success
+load_upsert[] -> skipped
+quality_check[] -> success
+quarantine_alert[] -> success
+transform_dedupe[] -> success
+ passed | total_rows |        reasons         |   action   
+--------+------------+------------------------+------------
+ f      |       6619 | rows 6619 < min 100000 | quarantine
+(1 row)
+
+      run_id       |        reasons         | row_count 
+-------------------+------------------------+-----------
+ quality_fail_test | rows 6619 < min 100000 |      6619
+(1 row)
+
+    source     |   status    | rows_fetched |     error_message      
+---------------+-------------+--------------+------------------------
+ quality_alert | quarantined |         6619 | rows 6619 < min 100000
+(1 row)
+

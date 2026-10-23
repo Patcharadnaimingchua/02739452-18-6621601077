@@ -1,0 +1,34 @@
+Source-down test: AIR4THAI_URL=https://air4thai.pcd.go.th/services/WRONG_URL_TEST.php (2026-10-23 13:43)
+Task states:
+create_tables[] -> success
+extract.extract_air4thai[] -> skipped
+extract.extract_openmeteo[0] -> success
+extract.extract_openmeteo[1] -> success
+extract.extract_openmeteo[2] -> success
+extract.extract_openmeteo[3] -> success
+extract.extract_openmeteo[4] -> success
+extract.plan_openmeteo_batches[] -> success
+extract.scrape_aqicn[] -> success
+finish[] -> success
+load_upsert[] -> success
+quality_check[] -> success
+quarantine_alert[] -> skipped
+transform_dedupe[] -> success
+      source      | status  | rows_fetched |                                                  err                                                   |                                           detail                                           
+------------------+---------+--------------+--------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------
+ air4thai         | failed  |            0 | HTTPError: 404 Client Error: Not Found for url: https://air4thai.pcd.go.th/services/WRONG_URL_TEST.php | 
+ openmeteo        | success |          144 |                                                                                                        | region=northeast stations=3
+ openmeteo        | success |          144 |                                                                                                        | region=central stations=3
+ openmeteo        | success |           96 |                                                                                                        | region=east stations=2
+ openmeteo        | success |          144 |                                                                                                        | region=south stations=3
+ openmeteo        | success |          192 |                                                                                                        | region=north stations=4
+ aqicn_scrape     | success |           40 |                                                                                                        | 
+ transform_dedupe | success |          610 |                                                                                                        | before=610 after=610 removed=0 removed_by={} kept_by={'openmeteo': 570, 'aqicn_scrape': 40
+ load_upsert      | success |          610 |                                                                                                        | table_rows_after=7192
+(9 rows)
+
+ passed | total_rows |       sources_ok       |      reasons      
+--------+------------+------------------------+-------------------
+ t      |        610 | openmeteo,aqicn_scrape | all checks passed
+(1 row)
+
