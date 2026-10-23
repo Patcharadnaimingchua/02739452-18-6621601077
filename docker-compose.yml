@@ -1,0 +1,122 @@
+x-airflow-common: &airflow-common
+  build: .
+  image: aq-airflow:2.10.5
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres:5432/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: Asia/Bangkok
+    AIRFLOW__WEBSERVER__DEFAULT_UI_TIMEZONE: Asia/Bangkok
+    AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: "30"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+    AQ_DB_HOST: postgres
+    AQ_DB_PORT: "5432"
+    AQ_DB_NAME: ${AQ_DB_NAME:-airquality}
+    AQ_DB_USER: ${POSTGRES_USER:-airflow}
+    AQ_DB_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+    AIR4THAI_URL: ${AIR4THAI_URL:-https://air4thai.pcd.go.th/services/getNewAQI_JSON.php}
+    OPENMETEO_URL: ${OPENMETEO_URL:-https://air-quality-api.open-meteo.com/v1/air-quality}
+    AQICN_BASE_URL: ${AQICN_BASE_URL:-https://aqicn.org}
+    SCRAPE_MAX_PAGES: ${SCRAPE_MAX_PAGES:-40}
+    SCRAPE_DELAY_SEC: ${SCRAPE_DELAY_SEC:-1.0}
+    QUALITY_MIN_ROWS: ${QUALITY_MIN_ROWS:-100}
+    QUALITY_MAX_NULL_RATIO: ${QUALITY_MAX_NULL_RATIO:-0.30}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - airflow-logs:/opt/airflow/logs
+    - airflow-data:/opt/airflow/data
+  user: "50000:0"
+  depends_on: &airflow-depends
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-airflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+      POSTGRES_DB: airflow
+      AQ_DB_NAME: ${AQ_DB_NAME:-airquality}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-airflow} -d ${AQ_DB_NAME:-airquality}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate &&
+        airflow users create --role Admin --username "$${_AIRFLOW_WWW_USER_USERNAME}" --password "$${_AIRFLOW_WWW_USER_PASSWORD}" \
+          --firstname Admin --lastname User --email admin@example.com || true
+    environment:
+      <<: *airflow-env
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    environment:
+      <<: *airflow-env
+      AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    image: aq-web:latest
+    environment:
+      AQ_DB_HOST: postgres
+      AQ_DB_PORT: "5432"
+      AQ_DB_NAME: ${AQ_DB_NAME:-airquality}
+      AQ_DB_USER: ${POSTGRES_USER:-airflow}
+      AQ_DB_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+    ports:
+      - "8501:8501"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pg-data:
+  airflow-logs:
+  airflow-data:

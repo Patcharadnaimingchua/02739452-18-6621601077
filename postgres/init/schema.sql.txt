@@ -1,0 +1,52 @@
+-- Schema for the airquality database (also re-applied idempotently by the DAG task create_tables)
+CREATE TABLE IF NOT EXISTS air_quality (
+    station_id   TEXT        NOT NULL,
+    station_name TEXT,
+    province     TEXT,
+    lat          DOUBLE PRECISION,
+    lon          DOUBLE PRECISION,
+    pm25         DOUBLE PRECISION,
+    observed_at  TIMESTAMPTZ NOT NULL,
+    source       TEXT        NOT NULL,
+    ingested_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (station_id, observed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_aq_observed ON air_quality (observed_at);
+CREATE INDEX IF NOT EXISTS idx_aq_source ON air_quality (source);
+
+CREATE TABLE IF NOT EXISTS pipeline_runs (
+    id            BIGSERIAL PRIMARY KEY,
+    run_id        TEXT NOT NULL,
+    source        TEXT NOT NULL,
+    status        TEXT NOT NULL,
+    rows_fetched  INTEGER,
+    error_message TEXT,
+    detail        TEXT,
+    started_at    TIMESTAMPTZ,
+    finished_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_runs_run ON pipeline_runs (run_id);
+
+CREATE TABLE IF NOT EXISTS data_quality_log (
+    id                 BIGSERIAL PRIMARY KEY,
+    run_id             TEXT NOT NULL,
+    checked_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    passed             BOOLEAN NOT NULL,
+    total_rows         INTEGER,
+    duplicates_removed INTEGER,
+    null_pm25          INTEGER,
+    out_of_range       INTEGER,
+    out_of_thailand    INTEGER,
+    sources_ok         TEXT,
+    reasons            TEXT,
+    action             TEXT
+);
+
+CREATE TABLE IF NOT EXISTS air_quality_quarantine (
+    id             BIGSERIAL PRIMARY KEY,
+    run_id         TEXT NOT NULL,
+    quarantined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reasons        TEXT,
+    row_count      INTEGER,
+    sample         JSONB
+);

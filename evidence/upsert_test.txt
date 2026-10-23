@@ -1,0 +1,5 @@
+UPSERT idempotency test (2026-10-23, Asia/Bangkok)
+before                     count=6616   (scheduled run)
+upsert_test_1 state=success count=6617  at 13:40:02  (+1 = aqicn station published a new hour: transform before=6786 -> 6787)
+upsert_test_2 state=success count=6617  at 13:41:26  (no change -> idempotent)
+duplicate (station_id, observed_at) groups: 0
