@@ -39,7 +39,7 @@ create_tables ──►│ extract_air4thai ───────► plan_openme
 
 | Service | Port | หน้าที่ |
 |---|---|---|
-| `postgres` (16) | 5432 | DB `airflow` (metadata) + DB `airquality` (ข้อมูล) สร้างด้วย `postgres/init/` |
+| `postgres` (16) | 5433 (host, ตั้งด้วย `POSTGRES_HOST_PORT`) | DB `airflow` (metadata) + DB `airquality` (ข้อมูล) สร้างด้วย `postgres/init/` |
 | `airflow-init` | – | `airflow db migrate` + สร้าง admin user |
 | `airflow-webserver` | **8080** | Airflow UI |
 | `airflow-scheduler` | – | LocalExecutor (รัน task) |

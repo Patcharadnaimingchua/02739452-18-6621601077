@@ -43,7 +43,7 @@ services:
       - pg-data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5433}:5432"  # host port; 5433 avoids clashing with a local PostgreSQL
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-airflow} -d ${AQ_DB_NAME:-airquality}"]
       interval: 5s
