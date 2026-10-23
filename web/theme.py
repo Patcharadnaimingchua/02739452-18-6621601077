@@ -34,10 +34,10 @@ STATUS_STYLE = {
 PALETTES = {
     "light": {"bg": "#f5f7fb", "surface": "#ffffff", "surface2": "#eef2f8", "border": "#e2e8f0",
               "text": "#0f172a", "muted": "#64748b", "accent": "#2563eb", "grid": "#e5e9f0",
-              "map": "carto-positron", "sidebar": "#ffffff"},
+              "map": "open-street-map", "sidebar": "#ffffff"},
     "dark": {"bg": "#0b1220", "surface": "#131c2e", "surface2": "#1b2640", "border": "#263247",
              "text": "#e5e9f2", "muted": "#94a3b8", "accent": "#60a5fa", "grid": "#223047",
-             "map": "carto-darkmatter", "sidebar": "#0f1829"},
+             "map": "open-street-map", "sidebar": "#0f1829"},
 }
 
 FONT_STACK = ("'IBM Plex Sans Thai', 'Sarabun', 'Noto Sans Thai', 'Leelawadee UI', 'Thonburi', "
@@ -111,21 +111,24 @@ def inject_css():
   --bg:{p['bg']}; --surface:{p['surface']}; --surface2:{p['surface2']}; --border:{p['border']};
   --text:{p['text']}; --muted:{p['muted']}; --accent:{p['accent']};
 }}
-html, body, [class*="css"], .stApp, .stMarkdown, .stText, button, input, textarea, select,
-[data-testid="stSidebar"] * , [data-testid="stMetric"] * {{ font-family: {FONT_STACK} !important; }}
+html, body, .stApp, .stMarkdown p, .stMarkdown li, label, input, textarea, .aq-header, .kpi, .src-card, .aq-section
+{{ font-family: {FONT_STACK}; }}
+/* never override the icon font (otherwise icons show as their ligature text or as grey boxes) */
+[data-testid="stIconMaterial"], .material-symbols-rounded {{ font-family: 'Material Symbols Rounded' !important; }}
 .stApp {{ background: var(--bg); color: var(--text); }}
 [data-testid="stHeader"] {{ background: transparent; }}
 [data-testid="stSidebar"] {{ background: {p['sidebar']}; border-right: 1px solid var(--border); }}
-[data-testid="stSidebar"] *, .stApp p, .stApp label, .stApp span, .stApp h1, .stApp h2, .stApp h3, .stApp li {{ color: var(--text); }}
+[data-testid="stSidebar"] p, [data-testid="stSidebar"] label, .stApp p, .stApp label, .stApp span, .stApp h1, .stApp h2, .stApp h3, .stApp li {{ color: var(--text); }}
 .block-container {{ padding-top: 2.2rem; max-width: 1400px; }}
 {'''
 [data-baseweb="select"] > div, [data-baseweb="input"] > div, [data-baseweb="base-input"], .stDateInput input,
-[data-testid="stSidebar"] [data-baseweb="select"] > div {{ background: var(--surface2) !important; border-color: var(--border) !important; }}
-[data-baseweb="popover"] ul, [data-baseweb="menu"], [data-baseweb="calendar"] {{ background: var(--surface) !important; }}
-[data-baseweb="popover"] li, [data-baseweb="calendar"] * {{ color: var(--text) !important; }}
-.stButton > button, .stDownloadButton > button {{ background: var(--surface2); color: var(--text); border-color: var(--border); }}
-[data-testid="stDataFrame"] {{ filter: invert(0.88) hue-rotate(180deg); }}
-[data-testid="stExpander"] {{ background: var(--surface); border-color: var(--border); }}
+[data-testid="stSidebar"] [data-baseweb="select"] > div { background: var(--surface2) !important; border-color: var(--border) !important; }
+[data-baseweb="select"] div, [data-baseweb="input"] input, .stDateInput input, input::placeholder { color: var(--text) !important; -webkit-text-fill-color: var(--text) !important; }
+[data-baseweb="popover"] ul, [data-baseweb="menu"], [data-baseweb="calendar"] { background: var(--surface) !important; }
+[data-baseweb="popover"] li, [data-baseweb="calendar"] * { color: var(--text) !important; }
+.stButton > button, .stDownloadButton > button { background: var(--surface2); color: var(--text); border-color: var(--border); }
+[data-testid="stDataFrame"] { filter: invert(0.88) hue-rotate(180deg); }
+[data-testid="stExpander"] { background: var(--surface); border-color: var(--border); }
 ''' if dark else ''}
 .aq-header {{ display:flex; align-items:center; gap:16px; padding:18px 22px; border-radius:16px;
   background: linear-gradient(120deg, {'#1e3a8a, #0f766e' if dark else '#2563eb, #0ea5e9'}); color:#fff; margin-bottom:18px;
@@ -141,14 +144,16 @@ html, body, [class*="css"], .stApp, .stMarkdown, .stText, button, input, textare
   background: var(--surface2); color: var(--accent); flex-shrink:0; }}
 .aq-section h3 {{ margin:0; padding:0; font-size:1.08rem; font-weight:650; color:var(--text) !important; }}
 .aq-section .hint {{ font-size:.8rem; color:var(--muted) !important; margin-left:4px; }}
-.kpi-grid {{ display:grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap:14px; margin: 4px 0 8px; }}
+.kpi-grid {{ display:grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap:12px; margin: 4px 0 8px; }}
+@media (max-width: 1100px) {{ .kpi-grid {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }} }}
+@media (max-width: 700px) {{ .kpi-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
 .kpi {{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px;
   border-top:4px solid var(--kc); box-shadow: 0 1px 3px rgba(15,23,42,.06); min-width:0; }}
 .kpi .top {{ display:flex; align-items:center; gap:8px; color:var(--muted) !important; font-size:.82rem; }}
 .kpi .top span {{ color:var(--muted) !important; }}
 .kpi .ic {{ width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center;
   background: color-mix(in srgb, var(--kc) 16%, transparent); color: var(--kc); flex-shrink:0; }}
-.kpi .val {{ font-size:1.55rem; font-weight:700; margin-top:8px; color:var(--text) !important; line-height:1.2;
+.kpi .val {{ font-size:clamp(1.15rem, 1.7vw, 1.55rem); font-weight:700; margin-top:8px; color:var(--text) !important; line-height:1.2;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
 .kpi .val small {{ font-size:.8rem; font-weight:500; color:var(--muted) !important; }}
 .kpi .foot {{ font-size:.76rem; color:var(--muted) !important; margin-top:4px; line-height:1.35; }}
@@ -213,11 +218,13 @@ def style_fig(fig, height=None):
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(family=FONT_STACK.replace("'", ""), color=p["text"], size=13),
         margin=dict(l=10, r=10, t=30, b=10),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, title_text=""),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0, title_text="",
+                    font=dict(color=p["text"])),
         hoverlabel=dict(font_family=FONT_STACK.replace("'", "")),
     )
-    fig.update_xaxes(gridcolor=p["grid"], zerolinecolor=p["grid"])
-    fig.update_yaxes(gridcolor=p["grid"], zerolinecolor=p["grid"])
+    axis = dict(gridcolor=p["grid"], zerolinecolor=p["grid"], color=p["muted"], title_font_color=p["text"])
+    fig.update_xaxes(**axis)
+    fig.update_yaxes(**axis)
     if height:
         fig.update_layout(height=height)
     return fig
