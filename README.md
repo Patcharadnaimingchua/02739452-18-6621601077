@@ -43,13 +43,13 @@ create_tables ──►│ extract_air4thai ───────► plan_openme
 | `airflow-init` | – | `airflow db migrate` + สร้าง admin user |
 | `airflow-webserver` | **8080** | Airflow UI |
 | `airflow-scheduler` | – | LocalExecutor (รัน task) |
-| `web` (Streamlit) | **8501** | Dashboard + หน้า Pipeline Status |
+| `web` (Streamlit) | **8501** | แดชบอร์ด + หน้าสถานะ Pipeline |
 
 ### ระดับที่ทำ
 - **ระดับ 1** — 1 แหล่ง → DAG `air_quality_pipeline` (extract → transform → load) → PostgreSQL → เว็บตาราง + กราฟ
-- **ระดับ 2** — 3 แหล่งใน `TaskGroup("extract")` รันขนาน; normalize เป็น schema เดียว (ชื่อสถานี/จังหวัด, เวลาเป็น Asia/Bangkok ปัดเป็นชั่วโมง, ค่าไม่ถูกต้อง เช่น `-1` หรือ นอกช่วง 0–1000 → `NULL`); **UPSERT**; เว็บมี KPI (จำนวนแถว, PM2.5 เฉลี่ย, สูงสุดพร้อมชื่อสถานี, จำนวนสถานี, เวลาข้อมูลล่าสุด) + ตัวกรอง (จังหวัด, แหล่ง, ช่วงวันที่, ช่วงค่า PM2.5) + กราฟแนวโน้ม, top 10, แผนที่
+- **ระดับ 2** — 3 แหล่งใน `TaskGroup("extract")` รันขนาน; normalize เป็น schema เดียว (ชื่อสถานี/จังหวัด, เวลาเป็น Asia/Bangkok ปัดเป็นชั่วโมง, ค่าไม่ถูกต้อง เช่น `-1` หรือ นอกช่วง 0–1000 → `NULL`); **UPSERT**; เว็บมี KPI (จำนวนแถว, PM2.5 เฉลี่ย, สูงสุดพร้อมชื่อสถานี, จำนวนสถานี, เวลาข้อมูลล่าสุด) + ตัวกรอง 5 ตัว (จังหวัด, แหล่งข้อมูล, ช่วงวันที่, ช่วงค่า PM2.5, รวมแถวที่ไม่มีค่า PM2.5) + กราฟแนวโน้ม, top 10, แผนที่
 - **ระดับ 3** — แต่ละ extract จับ exception → เขียน `pipeline_runs(status='failed', error_message)` แล้ว raise `AirflowSkipException` (task = skipped ไม่ใช่ failed) → `transform_dedupe` ใช้ `trigger_rule=none_failed_min_one_success` จึงรวมจากแหล่งที่เหลือได้; ถ้า Air4Thai ล่ม Open-Meteo จะใช้รายการพิกัดสำรอง; **ตัดซ้ำข้ามแหล่ง** key = (lat,lon ปัด 3 ตำแหน่ง, observed_at) และ (station_id, observed_at) เลือกตาม priority **Air4Thai > Open-Meteo > aqicn** และบันทึกจำนวนที่ตัด; **quality check** (แถว ≥ `QUALITY_MIN_ROWS`, สัดส่วน null ≤ `QUALITY_MAX_NULL_RATIO`, pm25 ใน 0–1000, พิกัดอยู่ในกรอบประเทศไทย) → `BranchPythonOperator`
-- **โบนัส** — Dynamic Task Mapping `extract_openmeteo.expand(batch=...)` แยกต่อภูมิภาค (north/northeast/central-n/east/south) + หน้าเว็บ **Pipeline Status** (อ่าน `pipeline_runs` และ `data_quality_log`)
+- **โบนัส** — Dynamic Task Mapping `extract_openmeteo.expand(batch=...)` แยกต่อภูมิภาค (north/northeast/central-n/east/south) + หน้าเว็บ **สถานะ Pipeline** (อ่าน `pipeline_runs` และ `data_quality_log`)
 
 ### ตาราง (DB `airquality`)
 - `air_quality(station_id, station_name, province, lat, lon, pm25, observed_at, source, ingested_at, PRIMARY KEY (station_id, observed_at))`
@@ -65,12 +65,12 @@ UPSERT จะไม่ให้แหล่ง priority ต่ำกว่าเ
 
 ```bash
 git clone https://github.com/Patcharadnaimingchua/02739452-18-6621601077.git && cd 02739452-18-6621601077
-cp .env.example .env          # แก้รหัสผ่านใน .env ได้ (ถ้าไม่มี .env จะใช้ค่า default ใน compose)
+cp .env.example .env          # ค่าใน .env.example เป็นรหัสตัวอย่าง (change_me_*) ควรแก้ก่อนใช้งานจริง; ถ้าไม่มี .env จะใช้ค่า default ใน compose
 docker compose up -d --build  # ครั้งแรก build image ~2-4 นาที
 ```
 
-- Airflow UI: http://localhost:8080 (user/pass ตาม `AIRFLOW_ADMIN_USER` / `AIRFLOW_ADMIN_PASSWORD` ใน `.env`; ถ้าไม่ได้สร้าง `.env` คือ `admin` / `admin`)
-- Dashboard: http://localhost:8501 (หน้า **Pipeline Status** อยู่ที่ sidebar)
+- Airflow UI: http://localhost:8080 (user/pass ตาม `AIRFLOW_ADMIN_USER` / `AIRFLOW_ADMIN_PASSWORD` ใน `.env` — ถ้าคัดลอก `.env.example` มาโดยไม่แก้ คือ `admin` / `change_me_admin`; ถ้าไม่ได้สร้าง `.env` เลย คือ `admin` / `admin`)
+- Dashboard: http://localhost:8501 (เมนู sidebar: **แดชบอร์ด** / **สถานะ Pipeline**)
 
 DAG ถูก unpause อัตโนมัติและตั้ง `@hourly` — เมื่อ scheduler ขึ้นจะรันรอบแรกเองภายใน ~1 นาที (ใช้เวลารันประมาณ 1–1.5 นาที เพราะ scrape แบบ sleep 1 วินาที/หน้า) หรือ trigger เอง:
 
@@ -81,6 +81,7 @@ docker compose exec airflow-scheduler airflow dags trigger air_quality_pipeline
 ตรวจผล:
 
 ```bash
+# (ต่อจากเครื่องโดยตรงใช้พอร์ต 5433; คำสั่งด้านล่างรันในคอนเทนเนอร์)
 docker compose exec postgres psql -U airflow -d airquality -c "SELECT source, COUNT(*) FROM air_quality GROUP BY 1"
 docker compose exec postgres psql -U airflow -d airquality -c "SELECT run_id, source, status, rows_fetched, error_message FROM pipeline_runs ORDER BY id DESC LIMIT 15"
 ```
@@ -122,16 +123,22 @@ docker compose down -v && docker compose up -d --build
 
 ## โครงสร้าง repo
 ```
-dags/air_quality_pipeline.py   DAG หลัก
-dags/aq_lib/sources.py         ตัวดึงข้อมูล 3 แหล่ง (API + scraping + robots.txt)
-dags/aq_lib/transform.py       normalize, AQI→µg/m³, dedupe
-dags/aq_lib/db.py              schema, UPSERT, pipeline_runs logging
-dags/aq_lib/certs/             intermediate CA ของ Let's Encrypt (YR1/Root YR) — ดูหมายเหตุ
-web/app.py                     Streamlit dashboard
-web/pages/1_Pipeline_Status.py หน้า Pipeline Status
-postgres/init/                 สร้าง DB airquality + ตาราง
+dags/air_quality_pipeline.py    DAG หลัก
+dags/aq_lib/sources.py          ตัวดึงข้อมูล 3 แหล่ง (API + scraping + robots.txt)
+dags/aq_lib/transform.py        normalize, AQI→µg/m³, dedupe
+dags/aq_lib/db.py               schema, UPSERT, pipeline_runs logging
+dags/aq_lib/certs/              intermediate CA ของ Let's Encrypt (YR1/Root YR) — ดูหมายเหตุ
+web/app.py                      entry point: page config, CSS, เมนูภาษาไทย (st.navigation)
+web/dashboard.py                หน้า "แดชบอร์ด": KPI, ตัวกรอง, กราฟ, แผนที่, ตาราง
+web/pipeline_status.py          หน้า "สถานะ Pipeline"
+web/theme.py                    design tokens, CSS, สี AQI และ helper ของกราฟ
+web/db.py                       เชื่อมต่อ PostgreSQL + ตัวโหลดข้อมูล (cache)
+web/live.py                     ตัวบอกสถานะรอบล่าสุดที่ header
+web/.streamlit/config.toml      ธีม Streamlit
+web/Dockerfile, requirements.txt  image ของเว็บ
+postgres/init/                  สร้าง DB airquality + ตาราง
 docker-compose.yml, Dockerfile, requirements.txt, .env.example
-evidence/                      ผลการทดสอบจริง
+evidence/                       ผลการทดสอบจริง
 ```
 
 ## หมายเหตุ
