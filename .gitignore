@@ -7,3 +7,4 @@ data/
 DEVLOG.md
 *.pdf
 .venv/
+report/
