@@ -64,7 +64,7 @@ UPSERT จะไม่ให้แหล่ง priority ต่ำกว่าเ
 ต้องมี Docker Desktop (Compose v2) และอินเทอร์เน็ต
 
 ```bash
-git clone <repo-url> && cd <repo>
+git clone https://github.com/Patcharadnaimingchua/02739452-18-6621601077.git && cd 02739452-18-6621601077
 cp .env.example .env          # แก้รหัสผ่านใน .env ได้ (ถ้าไม่มี .env จะใช้ค่า default ใน compose)
 docker compose up -d --build  # ครั้งแรก build image ~2-4 นาที
 ```
